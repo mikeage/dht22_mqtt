@@ -32,6 +32,11 @@
 
 void send_temp(float temperature, float humidity);
 void send_autodiscovery(void);
+void send_autodiscovery_temp(void);
+void send_autodiscovery_hum(void);
+#ifdef PIRPIN
+void send_autodiscovery_motion(void);
+#endif
 void send_online(void);
 void mqtt_reconnect(void);
 void save_config_cb(void);
@@ -39,6 +44,10 @@ void tick_flash(uint8_t led);
 void config_mode_cb(WiFiManager *myWiFiManager);
 void get_state_topic(char *buf, size_t size);
 void get_avail_topic(char *buf, size_t size);
+#ifdef PIRPIN
+void get_motion_topic(char *buf, size_t size);
+void send_motion(bool motion);
+#endif
 
 // Default values; these will be overridden in the WiFi setup
 char mqtt_server[40] = "mqtt.local";
@@ -63,6 +72,10 @@ void save_config_cb(void)
 boolean valid_temp = false;
 float last_temperature = 0.0;
 float last_humidity = 0.0;
+#ifdef PIRPIN
+bool last_motion = false;
+#endif
+
 
 // Flash the specified during WiFi setup
 void tick_flash(uint8_t led)
@@ -93,6 +106,16 @@ void get_state_topic(char *buf, size_t size)
 	state_topic += "/status";
 	strncpy(buf, state_topic.c_str(), size);
 }
+#ifdef PIRPIN
+void get_motion_topic(char *buf, size_t size)
+{
+	String motion_topic;
+	motion_topic += MQTT_PREFIX;
+	motion_topic += mqtt_topic_id;
+	motion_topic += "/motion";
+	strncpy(buf, motion_topic.c_str(), size);
+}
+#endif
 void get_avail_topic(char *buf, size_t size)
 {
 	String avail_topic;
@@ -105,51 +128,100 @@ void get_avail_topic(char *buf, size_t size)
 void send_autodiscovery(void)
 {
 
+	send_autodiscovery_temp();
+	send_autodiscovery_hum();
+#ifdef PIRPIN
+	send_autodiscovery_motion();
+#endif
+}
+
+void send_autodiscovery_temp(void)
+{
 	StaticJsonBuffer<MQTT_MAX_PACKET_SIZE> jsonBuffer;
-	JsonObject &root_temperature = jsonBuffer.createObject();
-	JsonObject &root_humidity = jsonBuffer.createObject();
+	JsonObject &root = jsonBuffer.createObject();
 
 	char avail_topic[60];
 	get_avail_topic(avail_topic, sizeof(avail_topic));
 	char state_topic[60];
 	get_state_topic(state_topic, sizeof(state_topic));
 
-	root_temperature["name"] = (String)mqtt_topic_id + " Temperature";
-	root_temperature["avty_t"] = (String)avail_topic;
-	root_temperature["pl_avail"] = (String) "true";
-	root_temperature["pl_not_avail"] = (String) "false";
-	root_temperature["stat_t"] = (String)state_topic;
-	root_temperature["unit_of_meas"] = (String) "°C";
-	root_temperature["val_tpl"] = (String) "{{ value_json.temperature | round(1) }}";
+	root["name"] = (String)mqtt_topic_id + " Temperature";
+	root["avty_t"] = (String)avail_topic;
+	root["pl_avail"] = (String) "true";
+	root["pl_not_avail"] = (String) "false";
+	root["stat_t"] = (String)state_topic;
+	root["unit_of_meas"] = (String) "°C";
+	root["val_tpl"] = (String) "{{ value_json.temperature | round(1) }}";
 
-	root_humidity["name"] = (String)mqtt_topic_id + " Humidity";
-	root_humidity["avty_t"] = (String)avail_topic;
-	root_humidity["pl_avail"] = (String) "true";
-	root_humidity["pl_not_avail"] = (String) "false";
-	root_humidity["stat_t"] = (String)state_topic;
-	root_humidity["unit_of_meas"] = (String) "%";
-	root_humidity["val_tpl"] = (String) "{{ value_json.humidity | round(0) }}";
-
-	String autodiscovery_topic_temperature;
-	autodiscovery_topic_temperature += MQTT_AUTODISCOVERY_PREFIX;
-	autodiscovery_topic_temperature += "sensor/";
-	autodiscovery_topic_temperature += mqtt_topic_id;
-	autodiscovery_topic_temperature += "_temp";
-	autodiscovery_topic_temperature += "/config";
-	char buffer_temperature[root_temperature.measureLength() + 1];
-	root_temperature.printTo(buffer_temperature, sizeof(buffer_temperature));
-	client.publish(autodiscovery_topic_temperature.c_str(), buffer_temperature, true);
-
-	String autodiscovery_topic_humidity;
-	autodiscovery_topic_humidity += MQTT_AUTODISCOVERY_PREFIX;
-	autodiscovery_topic_humidity += "sensor/";
-	autodiscovery_topic_humidity += mqtt_topic_id;
-	autodiscovery_topic_humidity += "_hum";
-	autodiscovery_topic_humidity += "/config";
-	char buffer_humidity[root_humidity.measureLength() + 1];
-	root_humidity.printTo(buffer_humidity, sizeof(buffer_humidity));
-	client.publish(autodiscovery_topic_humidity.c_str(), buffer_humidity, true);
+	String autodiscovery_topic;
+	autodiscovery_topic += MQTT_AUTODISCOVERY_PREFIX;
+	autodiscovery_topic += "sensor/";
+	autodiscovery_topic += mqtt_topic_id;
+	autodiscovery_topic += "_temp";
+	autodiscovery_topic += "/config";
+	char buffer[root.measureLength() + 1];
+	root.printTo(buffer, sizeof(buffer));
+	client.publish(autodiscovery_topic.c_str(), buffer, true);
 }
+
+void send_autodiscovery_hum(void)
+{
+	StaticJsonBuffer<MQTT_MAX_PACKET_SIZE> jsonBuffer;
+	JsonObject &root = jsonBuffer.createObject();
+
+	char avail_topic[60];
+	get_avail_topic(avail_topic, sizeof(avail_topic));
+	char state_topic[60];
+	get_state_topic(state_topic, sizeof(state_topic));
+
+	root["name"] = (String)mqtt_topic_id + " Humidity";
+	root["avty_t"] = (String)avail_topic;
+	root["pl_avail"] = (String) "true";
+	root["pl_not_avail"] = (String) "false";
+	root["stat_t"] = (String)state_topic;
+	root["unit_of_meas"] = (String) "%";
+	root["val_tpl"] = (String) "{{ value_json.humidity | round(0) }}";
+
+	String autodiscovery_topic;
+	autodiscovery_topic += MQTT_AUTODISCOVERY_PREFIX;
+	autodiscovery_topic += "sensor/";
+	autodiscovery_topic += mqtt_topic_id;
+	autodiscovery_topic += "_hum";
+	autodiscovery_topic += "/config";
+	char buffer[root.measureLength() + 1];
+	root.printTo(buffer, sizeof(buffer));
+	client.publish(autodiscovery_topic.c_str(), buffer, true);
+}
+
+#ifdef PIRPIN
+void send_autodiscovery_motion(void)
+{
+	StaticJsonBuffer<MQTT_MAX_PACKET_SIZE> jsonBuffer;
+	JsonObject &root = jsonBuffer.createObject();
+
+	char avail_topic[60];
+	get_avail_topic(avail_topic, sizeof(avail_topic));
+	char motion_topic[60];
+	get_motion_topic(motion_topic, sizeof(motion_topic));
+
+	root["name"] = (String)mqtt_topic_id + " Motion";
+	root["avty_t"] = (String)avail_topic;
+	root["pl_avail"] = (String) "true";
+	root["pl_not_avail"] = (String) "false";
+	root["stat_t"] = (String)motion_topic;
+	root["dev_cla"] = (String) "motion";
+
+	String autodiscovery_topic;
+	autodiscovery_topic += MQTT_AUTODISCOVERY_PREFIX;
+	autodiscovery_topic += "binary_sensor/";
+	autodiscovery_topic += mqtt_topic_id;
+	autodiscovery_topic += "_motion";
+	autodiscovery_topic += "/config";
+	char buffer[root.measureLength() + 1];
+	root.printTo(buffer, sizeof(buffer));
+	client.publish(autodiscovery_topic.c_str(), buffer, true);
+}
+#endif
 
 void send_online(void)
 {
@@ -221,6 +293,15 @@ void send_temp(float temperature, float humidity)
 	get_state_topic(state_topic, sizeof(state_topic));
 	client.publish(state_topic, buffer, false);
 }
+
+#ifdef PIRPIN
+void send_motion(bool motion)
+{
+	char motion_topic[60];
+	get_motion_topic(motion_topic, sizeof(motion_topic));
+	client.publish(motion_topic, motion ? "ON" : "OFF", false);
+}
+#endif
 
 void setup(void)
 {
@@ -376,27 +457,34 @@ void loop(void)
 	digitalWrite(PERIODIC_DHT_LED, HIGH);
 #endif
 
-#ifdef PIRPIN
-	if (do_pir) {
-		int pir;
-		pir = digitalRead(PIRPIN);
-		if (pir) {
-			Serial.println("PIR HIGH");
-		} else {
-			Serial.println("PIR LOW");
-		}
-#ifdef PIR_LED
-		digitalWrite(PIR_LED, !pir);
-#endif
-	}
-#endif
-
 	if (do_network) {
 		if (!client.connected()) {
 			mqtt_reconnect();
 		}
 		client.loop();
 	}
+
+#ifdef PIRPIN
+	if (do_pir) {
+		int pir;
+		pir = digitalRead(PIRPIN);
+		//if (pir) {
+		//Serial.println("PIR HIGH");
+		//} else {
+		//Serial.println("PIR LOW");
+		//}
+#ifdef PIR_LED
+		digitalWrite(PIR_LED, !pir);
+#endif
+		bool motion = (pir == HIGH);
+		if (motion != last_motion) {
+			last_motion = motion;
+			Serial.print(F("Motion is now "));
+			Serial.println(motion ? F("ON"): F("OFF"));
+			send_motion(pir == HIGH);
+		}
+	}
+#endif
 
 	if (do_dht) {
 		float humidity = dht.readHumidity();
