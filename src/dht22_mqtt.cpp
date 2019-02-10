@@ -17,10 +17,14 @@
 #define DHTPIN D7
 #define DHTTYPE DHT22
 
+// Details of the PIR
+#define PIRPIN D6
+
 // Which LEDs should flash. D0 is the LED on the NodeMCU. D4 is the LED on the ESP12 (the one that flashes during flashing). Undefine these to disable
 // #define PERIODIC_DHT_LED D0
 // #define UPDATE_DHT_LED D4
 #define WIFI_SETUP_LED D0
+#define PIR_LED D4
 
 // Thresholds for deciding which changes should be sent. Set to 0.0 to send every change
 #define MIN_TEMP_CHANGE 0.2
@@ -234,6 +238,13 @@ void setup(void)
 	pinMode(PERIODIC_DHT_LED, OUTPUT);
 	digitalWrite(PERIODIC_DHT_LED, HIGH);
 #endif
+#ifdef PIRPIN
+	pinMode(PIRPIN, INPUT);
+#ifdef PIR_LED
+	pinMode(PIR_LED, OUTPUT);
+	digitalWrite(PIR_LED, HIGH);
+#endif
+#endif
 
 #ifdef WIFI_SETUP_LED
 	wifi_ticker.attach(0.2, tick_flash, WIFI_SETUP_LED);
@@ -333,6 +344,19 @@ void loop(void)
 	digitalWrite(PERIODIC_DHT_LED, LOW);
 	delay(100);
 	digitalWrite(PERIODIC_DHT_LED, HIGH);
+#endif
+
+#ifdef PIRPIN
+	int pir;
+	pir = digitalRead(PIRPIN);
+	if (pir) {
+		Serial.println("PIR HIGH");
+	} else {
+		Serial.println("PIR LOW");
+	}
+#ifdef PIR_LED
+	digitalWrite(PIR_LED, !pir);
+#endif
 #endif
 
 	float humidity = dht.readHumidity();
