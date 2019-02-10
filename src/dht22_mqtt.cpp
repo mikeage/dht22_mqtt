@@ -18,12 +18,12 @@
 #define DHTTYPE DHT22
 
 // Which LEDs should flash. D0 is the LED on the NodeMCU. D4 is the LED on the ESP12 (the one that flashes during flashing). Undefine these to disable
-#define PERIODIC_DHT_LED D0
-#define UPDATE_DHT_LED D4
+// #define PERIODIC_DHT_LED D0
+// #define UPDATE_DHT_LED D4
 #define WIFI_SETUP_LED D0
 
 // Thresholds for deciding which changes should be sent. Set to 0.0 to send every change
-#define MIN_TEMP_CHANGE 0.1
+#define MIN_TEMP_CHANGE 0.2
 #define MIN_HUMIDITY_CHANGE 3 // The sensor offers a high degree of stated precision, but isn't really that accurate, so you might want to set this higher
 
 void send_temp(float temperature, float humidity);
