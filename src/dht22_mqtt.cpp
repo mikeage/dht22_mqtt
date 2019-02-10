@@ -337,8 +337,38 @@ void setup(void)
 #endif
 }
 
+unsigned long dht22_millis = 0;
+#ifdef PIRPIN
+unsigned long pir_millis = 0;
+#endif
+unsigned long network_millis = 0;
+
 void loop(void)
 {
+	bool do_dht = false;
+#ifdef PIRPIN
+	bool do_pir = false;
+#endif
+	bool do_network = false;
+
+	unsigned long current_millis = millis();
+
+	if (current_millis - dht22_millis >= 2000) {
+		dht22_millis = current_millis;
+		do_dht = true;
+	}
+#ifdef PIRPIN
+	if (current_millis - pir_millis >= 100) {
+		pir_millis = current_millis;
+		do_pir = true;
+	}
+#endif
+
+	if (current_millis - network_millis >= 100) {
+		network_millis = current_millis;
+		do_network = true;
+	}
+
 #ifdef PERIODIC_DHT_LED
 	// Flash LED once each cycle
 	digitalWrite(PERIODIC_DHT_LED, LOW);
@@ -347,52 +377,56 @@ void loop(void)
 #endif
 
 #ifdef PIRPIN
-	int pir;
-	pir = digitalRead(PIRPIN);
-	if (pir) {
-		Serial.println("PIR HIGH");
-	} else {
-		Serial.println("PIR LOW");
-	}
-#ifdef PIR_LED
-	digitalWrite(PIR_LED, !pir);
-#endif
-#endif
-
-	float humidity = dht.readHumidity();
-	float temperature = dht.readTemperature();
-
-	if (isnan(humidity) || isnan(temperature) || (humidity > 100) || (humidity < 0)) {
-		Serial.println(F("Failed to read from DHT sensor!"));
-		return;
-	}
-
-	if (!client.connected()) {
-		mqtt_reconnect();
-	}
-	client.loop();
-
-	if ((fabs(last_temperature - temperature) > MIN_TEMP_CHANGE) || (fabs(last_humidity - humidity) > MIN_HUMIDITY_CHANGE)) {
-		valid_temp = true;
-		Serial.println(F("New temperature or humidity detected"));
-		last_humidity = humidity;
-		last_temperature = temperature;
-#ifdef UPDATE_DHT_LED
-		for (int i = 0; i < 3; i++) {
-			digitalWrite(UPDATE_DHT_LED, LOW);
-			delay(100);
-			digitalWrite(UPDATE_DHT_LED, HIGH);
-			delay(50);
+	if (do_pir) {
+		int pir;
+		pir = digitalRead(PIRPIN);
+		if (pir) {
+			Serial.println("PIR HIGH");
+		} else {
+			Serial.println("PIR LOW");
 		}
+#ifdef PIR_LED
+		digitalWrite(PIR_LED, !pir);
 #endif
-		send_temp(temperature, humidity);
+	}
+#endif
+
+	if (do_network) {
+		if (!client.connected()) {
+			mqtt_reconnect();
+		}
+		client.loop();
 	}
 
-	Serial.print(F("Humidity: "));
-	Serial.print(humidity);
-	Serial.print(F("% Temperature: "));
-	Serial.print(temperature);
-	Serial.println(F("°C "));
+	if (do_dht) {
+		float humidity = dht.readHumidity();
+		float temperature = dht.readTemperature();
 
-	delay(2000);
+		if (isnan(humidity) || isnan(temperature) || (humidity > 100) || (humidity < 0)) {
+			Serial.println(F("Failed to read from DHT sensor!"));
+			return;
+		}
+
+		if ((fabs(last_temperature - temperature) > MIN_TEMP_CHANGE) || (fabs(last_humidity - humidity) > MIN_HUMIDITY_CHANGE)) {
+			valid_temp = true;
+			Serial.println(F("New temperature or humidity detected"));
+			last_humidity = humidity;
+			last_temperature = temperature;
+#ifdef UPDATE_DHT_LED
+			for (int i = 0; i < 3; i++) {
+				digitalWrite(UPDATE_DHT_LED, LOW);
+				delay(100);
+				digitalWrite(UPDATE_DHT_LED, HIGH);
+				delay(50);
+			}
+#endif
+			send_temp(temperature, humidity);
+		}
+
+		Serial.print(F("Humidity: "));
+		Serial.print(humidity);
+		Serial.print(F("% Temperature: "));
+		Serial.print(temperature);
+		Serial.println(F("°C "));
+	}
 }
